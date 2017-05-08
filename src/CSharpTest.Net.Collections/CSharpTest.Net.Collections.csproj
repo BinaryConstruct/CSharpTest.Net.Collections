@@ -37,6 +37,12 @@
     <DocumentationFile>bin\$(AssemblyName).XML</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="nunit.framework, Version=3.6.1.0, Culture=neutral, PublicKeyToken=2638cd05610744eb, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\NUnit.3.6.1\lib\net20\nunit.framework.dll</HintPath>
+    </Reference>
+    <Reference Include="NUnit.System.Linq, Version=0.6.0.0, Culture=neutral, PublicKeyToken=2638cd05610744eb, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\NUnit.3.6.1\lib\net20\NUnit.System.Linq.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
@@ -133,6 +139,8 @@
       <SubType>Designer</SubType>
     </EmbeddedResource>
     <None Include="CmdTool.config" />
+    <Compile Include="Collections\Node.Statistics.cs" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="LICENSE-2.0.txt" />
