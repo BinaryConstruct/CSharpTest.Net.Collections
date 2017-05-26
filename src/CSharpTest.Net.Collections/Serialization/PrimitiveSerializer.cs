@@ -178,11 +178,20 @@ namespace CSharpTest.Net.Serialization
         {
             List<byte> bytes = new List<byte>();
 
-            for (var i = 0; i < values.Length; i++)
+            if (values != null)
             {
-                for (var j = 0; j < values[i].Length; j++)
+                for (var i = 0; i < values.Length; i++)
                 {
-                    bytes.Add(values[i][j]);
+                    var val = values[i];
+
+                    if (val == null) continue;
+
+                    bytes.Add((byte)val.Length);
+
+                    for (var j = 0; j < val.Length; j++)
+                    {
+                        bytes.Add(val[j]);
+                    }
                 }
             }
 
@@ -196,19 +205,22 @@ namespace CSharpTest.Net.Serialization
 
             var offset = 0;
             
-            while (offset < bytes.Length)
+            if (bytes != null)
             {
-                var dataOffset = offset + 1;
-                var length = bytes[offset];
-                var arr = new byte[length];
-                
-                for (var i = 0; i < length; i++)
+                while (offset < bytes.Length)
                 {
-                    arr[i] = bytes[dataOffset + i];
-                }
+                    var dataOffset = offset + 1;
+                    var length = bytes[offset];
+                    var arr = new byte[length];
 
-                bytesList.Add(arr);
-                offset = dataOffset + length;
+                    for (var i = 0; i < length; i++)
+                    {
+                        arr[i] = bytes[dataOffset + i];
+                    }
+
+                    bytesList.Add(arr);
+                    offset = dataOffset + length;
+                }
             }
 
             return bytesList.ToArray();
