@@ -13,6 +13,7 @@
  */
 #endregion
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace CSharpTest.Net.Serialization
@@ -26,6 +27,7 @@ namespace CSharpTest.Net.Serialization
         ISerializer<byte>,
         ISerializer<sbyte>,
         ISerializer<byte[]>,
+        ISerializer<byte[][]>,
         ISerializer<char>,
         ISerializer<DateTime>,
         ISerializer<TimeSpan>,
@@ -162,6 +164,54 @@ namespace CSharpTest.Net.Serialization
         byte[] ISerializer<byte[]>.ReadFrom(Stream stream)
         {
             return Bytes.ReadFrom(stream);
+        }
+
+        #endregion
+        #region ISerializer<byte[][]> Members
+
+        /// <summary>
+        /// Allows arrays of arrays of bytes up to 255 bytes in length per array
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="stream"></param>
+        void ISerializer<byte[][]>.WriteTo(byte[][] values, Stream stream)
+        {
+            List<byte> bytes = new List<byte>();
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                for (var j = 0; j < values[i].Length; j++)
+                {
+                    bytes.Add(values[i][j]);
+                }
+            }
+
+            ((ISerializer<byte[]>)this).WriteTo(bytes.ToArray(), stream);
+        }
+
+        byte[][] ISerializer<byte[][]>.ReadFrom(Stream stream)
+        {
+            byte[] bytes = ((ISerializer<byte[]>)this).ReadFrom(stream);
+            List<byte[]> bytesList = new List<byte[]>();
+
+            var offset = 0;
+            
+            while (offset < bytes.Length)
+            {
+                var dataOffset = offset + 1;
+                var length = bytes[offset];
+                var arr = new byte[length];
+                
+                for (var i = 0; i < length; i++)
+                {
+                    arr[i] = bytes[dataOffset + i];
+                }
+
+                bytesList.Add(arr);
+                offset = dataOffset + length;
+            }
+
+            return bytesList.ToArray();
         }
 
         #endregion
