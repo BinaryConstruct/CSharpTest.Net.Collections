@@ -678,29 +678,13 @@ namespace CSharpTest.Net.Collections
             InsertResult result;
             using (RootLock root = LockRoot(LockType.Insert, "AddOrUpdate"))
                 result = Insert(root.Pin, key, ref info, null, int.MinValue);
-            if (result == InsertResult.Inserted && _hasCount)
+            if ((result == InsertResult.Inserted || result == InsertResult.Updated) && _hasCount)
             {
-                var postArray = info.PostValue as Array;
-                Interlocked.Increment(ref _count);
-                if (postArray != null)
+                if (result == InsertResult.Inserted)
                 {
-                    Interlocked.Add(ref _denseCount, postArray.Length);
+                    Interlocked.Increment(ref _count);
                 }
-                else
-                {
-                    Interlocked.Increment(ref _denseCount);
-                }
-            }
-            else if (result == InsertResult.Updated && _hasCount)
-            {
-                var preArray = info.PreValue as Array;
-                var postArray = info.PostValue as Array;
-                Interlocked.Increment(ref _count);
-                if (preArray != null || postArray != null)
-                {
-                    var diff = (postArray == null ? 0 : postArray.Length) - (preArray == null ? 0 : preArray.Length);
-                    Interlocked.Add(ref _denseCount, diff);
-                }
+                Interlocked.Add(ref _denseCount, info.PostCount - info.PreCount);
             }
             DebugComplete("Added({0}) = {1}", key, result);
             return result;
@@ -762,19 +746,13 @@ namespace CSharpTest.Net.Collections
             RemoveResult result;
             using (RootLock root = LockRoot(LockType.Delete, "Remove"))
                 result = Delete(root.Pin, key, ref removeValue, null, int.MinValue);
-            if (result == RemoveResult.Removed && _hasCount)
+            if ((result == RemoveResult.Removed || result == RemoveResult.Updated) && _hasCount)
             {
-                Interlocked.Decrement(ref _count);
-
-                var preArray = removeValue.PreValue as Array;
-                if (preArray != null)
+                if (result == RemoveResult.Removed)
                 {
-                    Interlocked.Add(ref _denseCount, -preArray.Length);
+                    Interlocked.Decrement(ref _count);
                 }
-                else
-                {
-                    Interlocked.Decrement(ref _denseCount);
-                }
+                Interlocked.Add(ref _denseCount, removeValue.PostCount - removeValue.PreCount);
             }
             DebugComplete("Removed({0}) = {1}", key, result);
             return result;

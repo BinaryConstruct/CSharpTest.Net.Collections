@@ -145,8 +145,8 @@ namespace CSharpTest.Net.Collections
 
             struct FetchFromStore<TNode> : ICreateOrUpdateValue<IStorageHandle, object>
             {
-                public object PreValue { get; private set; }
-                public object PostValue { get; private set; }
+                public int PreCount { get; private set; }
+                public int PostCount { get; private set; }
 
                 public INodeStorage Storage;
                 public ISerializer<TNode> Serializer;
@@ -156,12 +156,12 @@ namespace CSharpTest.Net.Collections
 
                 public bool CreateValue(IStorageHandle key, out object value)
                 {
-                    PreValue = default(object);
+                    PreCount = 0;
                     if (DirtyCache.TryGetValue(key, out value) && value != null)
                     {
                         Success = true;
                         Value = (TNode)value;
-                        PostValue = Value;
+                        PostCount = 1;
                         return true;
                     }
 
@@ -169,7 +169,7 @@ namespace CSharpTest.Net.Collections
                     if (Success)
                     {
                         value = Value;
-                        PostValue = value;
+                        PostCount = 1;
                         return true;
                     }
 
@@ -178,10 +178,10 @@ namespace CSharpTest.Net.Collections
                 }
                 public bool UpdateValue(IStorageHandle key, ref object value)
                 {
-                    PreValue = value;
+                    PreCount = 1;
                     Success = value != null;
                     Value = (TNode)value;
-                    PostValue = Value;
+                    PostCount = 1;
                     return false;
                 }
             }

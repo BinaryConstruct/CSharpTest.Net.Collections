@@ -19,10 +19,11 @@ namespace CSharpTest.Net.Collections
 {
     partial class BPlusTree<TKey, TValue>
     {
-        enum RemoveResult { Ignored = 0, Removed = 1, NotFound = 2 }
+        enum RemoveResult { Ignored = 0, Removed = 1, NotFound = 2, Updated = 3 }
         struct RemoveAlways : IRemoveValue<TKey, TValue>
         {
-            public TValue PreValue { get; private set; }
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
             private bool _removed;
             private TValue _value;
             public bool TryGetValue(out TValue value)
@@ -33,40 +34,48 @@ namespace CSharpTest.Net.Collections
             bool IRemoveValue<TKey, TValue>.RemoveValue(TKey key, TValue value)
             {
                 _value = value;
-                PreValue = value;
+                PreCount = 1;
+                PostCount = 0;
                 return _removed = true;
             }
         }
         struct RemoveIfValue : IRemoveValue<TKey, TValue>
         {
-            public TValue PreValue { get; private set; }
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
 
             private readonly TValue _value;
             public RemoveIfValue(TKey key, TValue value)
             {
-                PreValue = default(TValue);
+                PreCount = 1;
+                PostCount = 1;
                 _value = value;
             }
             bool IRemoveValue<TKey, TValue>.RemoveValue(TKey key, TValue value)
             {
-                PreValue = value;
-                return EqualityComparer<TValue>.Default.Equals(value, _value);
+                var removed = EqualityComparer<TValue>.Default.Equals(value, _value);
+                PreCount = 1;
+                PostCount = removed ? 0 : 1;
+                return removed;
             }
         }
         struct RemoveIfPredicate : IRemoveValue<TKey, TValue>
         {
-            public TValue PreValue { get; private set; }
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
 
             private readonly KeyValuePredicate<TKey, TValue> _test;
             public RemoveIfPredicate(KeyValuePredicate<TKey, TValue> test)
             {
-                PreValue = default(TValue);
+                PreCount = 1;
+                PostCount = 1;
                 _test = test;
             }
             bool IRemoveValue<TKey, TValue>.RemoveValue(TKey key, TValue value)
             {
-                PreValue = value;
-                return _test(key, value);
+                var removed = _test(key, value);
+                PostCount = removed ? 0 : 1;
+                return removed;
             }
         }
 
@@ -116,16 +125,32 @@ namespace CSharpTest.Net.Collections
             int ordinal;
             if (me.BinarySearch(_itemComparer, new Element(key), out ordinal) && isValueNode)
             {
-                if (condition.RemoveValue(key, me[ordinal].Payload))
+                TValue updatedValue = me[ordinal].Payload;
+                if (condition.RemoveValue(key, updatedValue))
                 {
-                    using (NodeTransaction t = _storage.BeginTransaction())
+                    if (condition.PostCount > 0)
                     {
-                        me = t.BeginUpdate(thisLock);
-                        me.Remove(ordinal, new Element(key), _keyComparer);
-                        t.RemoveValue(key);
-                        t.Commit();
-                        return RemoveResult.Removed;
+                        using (NodeTransaction t = _storage.BeginTransaction())
+                        {
+                            me = t.BeginUpdate(thisLock);
+                            me.SetValue(ordinal, key, updatedValue, _keyComparer);
+                            t.UpdateValue(key, updatedValue);
+                            t.Commit();
+                            return RemoveResult.Updated;
+                        }
                     }
+                    else
+                    {
+                        using (NodeTransaction t = _storage.BeginTransaction())
+                        {
+                            me = t.BeginUpdate(thisLock);
+                            me.Remove(ordinal, new Element(key), _keyComparer);
+                            t.RemoveValue(key);
+                            t.Commit();
+                            return RemoveResult.Removed;
+                        }
+                    }
+
                 }
                 return RemoveResult.Ignored;
             }
