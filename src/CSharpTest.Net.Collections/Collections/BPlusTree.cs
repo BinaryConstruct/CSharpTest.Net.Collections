@@ -19,6 +19,7 @@ using System.Threading;
 using CSharpTest.Net.Interfaces;
 using CSharpTest.Net.Synchronization;
 using System.IO;
+using System.Linq;
 
 namespace CSharpTest.Net.Collections
 {
@@ -32,11 +33,13 @@ namespace CSharpTest.Net.Collections
         readonly NodeCacheBase _storage;
         readonly ILockStrategy _selfLock;
         readonly IComparer<TKey> _keyComparer;
+        readonly IComparer<TKey> _reverseKeyComparer;
         readonly IComparer<Element> _itemComparer;
 
         private bool _disposed;
         private bool _hasCount;
         private int _count;
+        private int _denseCount;
 
         /// <summary>
         /// Constructs an in-memory BPlusTree
@@ -83,6 +86,7 @@ namespace CSharpTest.Net.Collections
             _options = ioptions.Clone();
             _selfLock = _options.CallLevelLock;
             _keyComparer = _options.KeyComparer;
+            _reverseKeyComparer = ReverseComparer<TKey>.Reverse(_options.KeyComparer);
             _itemComparer = new ElementComparer(_keyComparer);
 
             switch (_options.CachePolicy)
@@ -149,6 +153,7 @@ namespace CSharpTest.Net.Collections
             if (nodeStoreWithCount != null)
             {
                 _count = nodeStoreWithCount.Count;
+                _denseCount = nodeStoreWithCount.DenseCount;
                 _hasCount = _count >= 0;
             }
         }
@@ -218,6 +223,7 @@ namespace CSharpTest.Net.Collections
                 if (_storage.Storage is INodeStoreWithCount)
                 {
                     ((INodeStoreWithCount)_storage.Storage).Count = _hasCount ? _count : -1;
+                    ((INodeStoreWithCount)_storage.Storage).DenseCount = _hasCount ? _denseCount : -1;
                 }
                 if (_storage.Storage is ITransactable)
                 {
@@ -299,6 +305,11 @@ namespace CSharpTest.Net.Collections
         /// <summary> See comments on EnableCount() for usage of this property </summary>
         public int Count { get { return _hasCount ? _count : int.MinValue; } }
 
+        /// <summary>
+        /// See comments on EnableCount() for usage of this property.
+        /// </summary>
+        public int DenseCount { get { return _hasCount ? _denseCount : int.MinValue; } }
+
         /// <summary> Returns the lock timeout being used by this instance. </summary>
         int LockTimeout { get { return _options.LockTimeout; } }
 
@@ -314,8 +325,13 @@ namespace CSharpTest.Net.Collections
             if (_hasCount)
                 return;
             _count = 0;
+            _denseCount = 0;
             using (RootLock root = LockRoot(LockType.Read, "EnableCount", true))
+            {
                 _count = CountValues(root.Pin);
+                _denseCount = CountValues(root.Pin, true);
+            }
+                
             _hasCount = true;
         }
 
@@ -662,8 +678,14 @@ namespace CSharpTest.Net.Collections
             InsertResult result;
             using (RootLock root = LockRoot(LockType.Insert, "AddOrUpdate"))
                 result = Insert(root.Pin, key, ref info, null, int.MinValue);
-            if (result == InsertResult.Inserted && _hasCount)
-                Interlocked.Increment(ref _count);
+            if ((result == InsertResult.Inserted || result == InsertResult.Updated) && _hasCount)
+            {
+                if (result == InsertResult.Inserted)
+                {
+                    Interlocked.Increment(ref _count);
+                }
+                Interlocked.Add(ref _denseCount, info.PostCount - info.PreCount);
+            }
             DebugComplete("Added({0}) = {1}", key, result);
             return result;
         }
@@ -724,8 +746,14 @@ namespace CSharpTest.Net.Collections
             RemoveResult result;
             using (RootLock root = LockRoot(LockType.Delete, "Remove"))
                 result = Delete(root.Pin, key, ref removeValue, null, int.MinValue);
-            if (result == RemoveResult.Removed && _hasCount)
-                Interlocked.Decrement(ref _count);
+            if ((result == RemoveResult.Removed || result == RemoveResult.Updated) && _hasCount)
+            {
+                if (result == RemoveResult.Removed)
+                {
+                    Interlocked.Decrement(ref _count);
+                }
+                Interlocked.Add(ref _denseCount, removeValue.PostCount - removeValue.PreCount);
+            }
             DebugComplete("Removed({0}) = {1}", key, result);
             return result;
         }
@@ -762,6 +790,75 @@ namespace CSharpTest.Net.Collections
         }
 
         /// <summary>
+        /// Creates a leaderboard of the top N players, with an optional offset.
+        /// </summary>
+        public Tuple<IEnumerable<KeyValuePair<TKey, TValue>>, int> Top(int skip = 0, int take = 100, bool desc = true)
+        {
+            TKey startKey;
+            TKey stopKey;
+            int startValueOffset;
+            int stopValueOffset;
+
+            using (RootLock root = LockRoot(LockType.Read, "Top"))
+            {
+                int startOffset;
+
+                if (!Select(root.Pin, skip, out startKey, out startOffset, out startValueOffset, desc))
+                {
+                    throw new InvalidOperationException();
+                }
+            }
+
+            using (RootLock root = LockRoot(LockType.Read, "Top"))
+            {
+                int stopOffset;
+
+                if (!Select(root.Pin, (skip + take), out stopKey, out stopOffset, out stopValueOffset, desc))
+                {
+                    throw new InvalidOperationException();
+                }
+            }
+
+            return Tuple.Create(EnumerateRange(startKey, stopKey, desc), startValueOffset);
+        }
+
+        /// <summary>
+        /// Get the percentile of the specified key
+        /// </summary>
+        public bool TryGetPercentile(TKey key, out float percentile, bool dense = true)
+        {
+            using (RootLock root = LockRoot(LockType.Read, "TryGetPercentile"))
+            {
+                int equalValues = 0;
+                TValue value;
+                if (TryGetValue(key, out value))
+                {
+                    var array = value as Array;
+                    if (array != null)
+                    {
+                        equalValues = array.Length;
+                    }
+                }
+
+                int rank = 0;
+                var result = TryGetRank(key, out rank, dense);
+
+                percentile = 100 - ((float)(200 * rank + 100 * equalValues) / (float)(DenseCount * 2));
+
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Get the rank of the specified key
+        /// </summary>
+        public bool TryGetRank(TKey key, out int rank, bool dense = false)
+        {
+            using (RootLock root = LockRoot(LockType.Read, "TryGetRank"))
+                return Rank(root.Pin, key, dense, out rank);
+        }
+
+        /// <summary>
         /// Returns the last key and it's associated value.
         /// </summary>
         public bool TryGetLast(out KeyValuePair<TKey, TValue> item)
@@ -781,9 +878,17 @@ namespace CSharpTest.Net.Collections
         /// <summary>
         /// Inclusivly enumerates from start key to stop key
         /// </summary>
-        public IEnumerable<KeyValuePair<TKey, TValue>> EnumerateRange(TKey start, TKey end)
+        public IEnumerable<KeyValuePair<TKey, TValue>> EnumerateRange(TKey start, TKey end, bool desc = false)
         {
-            return new Enumerator(this, start, x => (_keyComparer.Compare(x.Key, end) <= 0));
+            if (desc)
+            {
+                IEnumerable<KeyValuePair<TKey, TValue>> enumerator = new Enumerator(this, end, x => (_keyComparer.Compare(x.Key, start) <= 0));
+                return enumerator.Reverse();
+            }
+            else
+            {
+                return new Enumerator(this, start, x => (_keyComparer.Compare(x.Key, end) <= 0));
+            }
         }
 
         /// <summary>
@@ -937,6 +1042,7 @@ namespace CSharpTest.Net.Collections
             {
                 _storage.DeleteAll();
                 _count = 0;
+                _denseCount = 0;
                 //Since transaction logs do not deal with Clear(), we need to commit our current state
                 CommitChanges(false);
             }

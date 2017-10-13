@@ -24,29 +24,42 @@ namespace CSharpTest.Net.Collections
 
         private struct FetchValue : ICreateOrUpdateValue<TKey, TValue>
         {
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
+
             private TValue _value;
             public FetchValue(TValue value)
             {
+                PreCount = 0;
+                PostCount = 0;
                 _value = value;
             }
             public TValue Value { get { return _value; } }
             public bool CreateValue(TKey key, out TValue value)
             {
                 value = _value;
+                PostCount = 1;
                 return true;
             }
             public bool UpdateValue(TKey key, ref TValue value)
             {
+                PreCount = 1;
                 _value = value;
+                PostCount = 1;
                 return false;
             }
         }
         private struct InsertValue : ICreateOrUpdateValue<TKey, TValue>
         {
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
+
             private TValue _value;
             private readonly bool _canUpdate;
             public InsertValue(TValue value, bool canUpdate)
             {
+                PreCount = 0;
+                PostCount = 0;
                 _value = value;
                 _canUpdate = canUpdate;
             }
@@ -54,20 +67,32 @@ namespace CSharpTest.Net.Collections
             public bool CreateValue(TKey key, out TValue value)
             {
                 value = _value;
+                PostCount = 1;
                 return true;
             }
             public bool UpdateValue(TKey key, ref TValue value)
             {
+                var updated = true;
+                PreCount = 1;
                 if(!_canUpdate)
                     throw new DuplicateKeyException();
                 if (EqualityComparer<TValue>.Default.Equals(value, _value))
-                    return false;
-                value = _value;
-                return true;
+                {
+                    updated = false;
+                }
+                else
+                {
+                    value = _value;
+                }
+                PostCount = 1;
+                return updated;
             }
         }
         private struct InsertionInfo : ICreateOrUpdateValue<TKey, TValue>
         {
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
+
             private TValue _value;
             private readonly Converter<TKey, TValue> _factory;
             private readonly KeyValueUpdate<TKey, TValue> _updater;
@@ -75,6 +100,8 @@ namespace CSharpTest.Net.Collections
             public TValue Value { get { return _value; } }
             public bool CreateValue(TKey key, out TValue value)
             {
+                PreCount = 0;
+                PostCount = 0;
                 if (_factory != null)
                 {
                     value = _value = _factory(key);
@@ -94,6 +121,8 @@ namespace CSharpTest.Net.Collections
                     return false;
                 
                 value = _value;
+                PreCount = 1;
+                PostCount = 1;
                 return true;
             }
             public InsertionInfo(Converter<TKey, TValue> factory, KeyValueUpdate<TKey, TValue> updater)

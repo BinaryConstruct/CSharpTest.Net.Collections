@@ -13,6 +13,7 @@
  */
 #endregion
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace CSharpTest.Net.Serialization
@@ -26,18 +27,22 @@ namespace CSharpTest.Net.Serialization
         ISerializer<byte>,
         ISerializer<sbyte>,
         ISerializer<byte[]>,
+        ISerializer<byte[][]>,
         ISerializer<char>,
         ISerializer<DateTime>,
         ISerializer<TimeSpan>,
         ISerializer<short>,
         ISerializer<ushort>,
         ISerializer<int>,
+        ISerializer<int[]>,
         ISerializer<uint>,
         ISerializer<long>,
+        ISerializer<long[]>,
         ISerializer<ulong>,
         ISerializer<double>,
         ISerializer<float>,
         ISerializer<Guid>,
+        ISerializer<Guid[]>,
         ISerializer<IntPtr>,
         ISerializer<UIntPtr>
     {
@@ -67,9 +72,13 @@ namespace CSharpTest.Net.Serialization
         /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
         public static readonly ISerializer<int> Int32 = Instance;
         /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
+        public static readonly ISerializer<int[]> Int32Array = Instance;
+        /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
         public static readonly ISerializer<uint> UInt32 = Instance;
         /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
         public static readonly ISerializer<long> Int64 = Instance;
+        /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
+        public static readonly ISerializer<long[]> Int64Array = Instance;
         /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
         public static readonly ISerializer<ulong> UInt64 = Instance;
         /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
@@ -78,6 +87,8 @@ namespace CSharpTest.Net.Serialization
         public static readonly ISerializer<float> Float = Instance;
         /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
         public static readonly ISerializer<Guid> Guid = Instance;
+        /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
+        public static readonly ISerializer<Guid[]> GuidArray = Instance;
         /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
         public static readonly ISerializer<IntPtr> IntPtr = Instance;
         /// <summary> Gets a typed version of the PrimitiveSerializer </summary>
@@ -153,6 +164,66 @@ namespace CSharpTest.Net.Serialization
         byte[] ISerializer<byte[]>.ReadFrom(Stream stream)
         {
             return Bytes.ReadFrom(stream);
+        }
+
+        #endregion
+        #region ISerializer<byte[][]> Members
+
+        /// <summary>
+        /// Allows arrays of arrays of bytes up to 255 bytes in length per array
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="stream"></param>
+        void ISerializer<byte[][]>.WriteTo(byte[][] values, Stream stream)
+        {
+            List<byte> bytes = new List<byte>();
+
+            if (values != null)
+            {
+                for (var i = 0; i < values.Length; i++)
+                {
+                    var val = values[i];
+
+                    if (val == null) continue;
+
+                    bytes.Add((byte)val.Length);
+
+                    for (var j = 0; j < val.Length; j++)
+                    {
+                        bytes.Add(val[j]);
+                    }
+                }
+            }
+
+            ((ISerializer<byte[]>)this).WriteTo(bytes.ToArray(), stream);
+        }
+
+        byte[][] ISerializer<byte[][]>.ReadFrom(Stream stream)
+        {
+            byte[] bytes = ((ISerializer<byte[]>)this).ReadFrom(stream);
+            List<byte[]> bytesList = new List<byte[]>();
+
+            var offset = 0;
+            
+            if (bytes != null)
+            {
+                while (offset < bytes.Length)
+                {
+                    var dataOffset = offset + 1;
+                    var length = bytes[offset];
+                    var arr = new byte[length];
+
+                    for (var i = 0; i < length; i++)
+                    {
+                        arr[i] = bytes[dataOffset + i];
+                    }
+
+                    bytesList.Add(arr);
+                    offset = dataOffset + length;
+                }
+            }
+
+            return bytesList.ToArray();
         }
 
         #endregion
@@ -244,6 +315,26 @@ namespace CSharpTest.Net.Serialization
         }
 
         #endregion
+        #region ISerializer<int[]> Members
+
+        void ISerializer<int[]>.WriteTo(int[] values, Stream stream)
+        {
+            byte[] bytes = new byte[values.Length * 4];
+            Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+
+            ((ISerializer<byte[]>)this).WriteTo(bytes, stream);
+        }
+
+        int[] ISerializer<int[]>.ReadFrom(Stream stream)
+        {
+            byte[] bytes = ((ISerializer<byte[]>)this).ReadFrom(stream);
+            int[] ints = new int[bytes.Length / 4];
+            Buffer.BlockCopy(bytes, 0, ints, 0, bytes.Length);
+
+            return ints;
+        }
+
+        #endregion
         #region ISerializer<uint> Members
 
         void ISerializer<uint>.WriteTo(uint value, Stream stream)
@@ -287,6 +378,26 @@ namespace CSharpTest.Net.Serialization
         long ISerializer<long>.ReadFrom(Stream stream)
         {
             return unchecked((long)((ISerializer<ulong>)this).ReadFrom(stream));
+        }
+
+        #endregion
+        #region ISerializer<long[]> Members
+
+        void ISerializer<long[]>.WriteTo(long[] values, Stream stream)
+        {
+            byte[] bytes = new byte[values.Length * 8];
+            Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+
+            ((ISerializer<byte[]>)this).WriteTo(bytes, stream);
+        }
+
+        long[] ISerializer<long[]>.ReadFrom(Stream stream)
+        {
+            byte[] bytes = ((ISerializer<byte[]>)this).ReadFrom(stream);
+            long[] longs = new long[bytes.Length / 8];
+            Buffer.BlockCopy(bytes, 0, longs, 0, bytes.Length);
+
+            return longs;
         }
 
         #endregion
@@ -377,6 +488,43 @@ namespace CSharpTest.Net.Serialization
 
             Check.Assert<InvalidDataException>(16 == bytesRead);
             return new Guid(tmp);
+        }
+
+        #endregion
+        #region ISerializer<Guid[]> Members
+
+        void ISerializer<Guid[]>.WriteTo(Guid[] values, Stream stream)
+        {
+            byte[] bytes = new byte[values.Length * 16];
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                var guidBytes = values[i].ToByteArray();
+                for (var j = 0; j < 16; j++)
+                {
+                    bytes[i * 16 + j] = guidBytes[j];
+                }
+            }
+
+            ((ISerializer<byte[]>)this).WriteTo(bytes, stream);
+        }
+
+        Guid[] ISerializer<Guid[]>.ReadFrom(Stream stream)
+        {
+            byte[] bytes = ((ISerializer<byte[]>)this).ReadFrom(stream);
+            Guid[] guids = new Guid[bytes.Length / 16];
+            
+            for (var i = 0; i < guids.Length; i++)
+            {
+                var guidBytes = new byte[16];
+                for (var j = 0; j < 16; j++)
+                {
+                    guidBytes[j] = bytes[i * 16 + j];
+                }
+                guids[i] = new System.Guid(guidBytes);
+            }
+
+            return guids;
         }
 
         #endregion

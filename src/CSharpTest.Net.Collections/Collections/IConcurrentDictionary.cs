@@ -53,6 +53,14 @@ namespace CSharpTest.Net.Collections
     /// </remarks>
     public interface ICreateOrUpdateValue<TKey, TValue> : ICreateValue<TKey, TValue>, IUpdateValue<TKey, TValue>
     {
+        /// <summary>
+        /// The number of values before the change occurred
+        /// </summary>
+        int PreCount { get; }
+        /// <summary>
+        /// The number of values after the change occurred
+        /// </summary>
+        int PostCount { get; }
     }
 
     /// <summary>
@@ -64,6 +72,15 @@ namespace CSharpTest.Net.Collections
     /// </remarks>
     public interface IRemoveValue<TKey, TValue>
     {
+        /// <summary>
+        /// The number of values before the removal
+        /// </summary>
+        int PreCount { get; }
+        /// <summary>
+        /// The number of values after the removal
+        /// </summary>
+        int PostCount { get; }
+
         /// <summary>
         /// Called when the dictionary is about to remove the key/value pair provided, return true to allow
         /// it's removal, or false to prevent it from being removed.

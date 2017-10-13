@@ -1387,6 +1387,8 @@ namespace CSharpTest.Net.Collections
 
         struct DelInfo : IRemoveValue<TKey, TValue>
         {
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
             public TValue Value;
             readonly bool _hasTestValue;
             readonly TValue _testValue;
@@ -1394,6 +1396,8 @@ namespace CSharpTest.Net.Collections
 
             public DelInfo(TValue expected)
             {
+                PreCount = 1;
+                PostCount = 1;
                 Value = default(TValue);
                 _testValue = expected;
                 _hasTestValue = true;
@@ -1409,22 +1413,31 @@ namespace CSharpTest.Net.Collections
                 if (Condition != null && !Condition(key, value))
                     return false;
 
+                PostCount = 0;
+
                 return true;
             }
         }
 
         struct AddInfo : ICreateOrUpdateValue<TKey, TValue>
         {
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
+
             public bool CanUpdate;
             public TValue Value;
             public bool CreateValue(TKey key, out TValue value)
             {
+                PreCount = 0;
+                PostCount = 1;
                 value = Value;
                 return true;
             }
 
             public bool UpdateValue(TKey key, ref TValue value)
             {
+                PreCount = 1;
+                PostCount = 1;
                 if (!CanUpdate)
                 {
                     Value = value;
@@ -1438,6 +1451,9 @@ namespace CSharpTest.Net.Collections
 
         struct Add2Info : ICreateOrUpdateValue<TKey, TValue>
         {
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
+
             readonly bool _hasAddValue;
             readonly TValue _addValue;
             public TValue Value;
@@ -1446,6 +1462,8 @@ namespace CSharpTest.Net.Collections
 
             public Add2Info(TValue addValue) : this()
             {
+                PreCount = 0;
+                PostCount = 0;
                 _hasAddValue = true;
                 _addValue = addValue;
             }
@@ -1455,11 +1473,13 @@ namespace CSharpTest.Net.Collections
                 if (_hasAddValue)
                 {
                     value = Value = _addValue;
+                    PostCount = 1;
                     return true;
                 }
                 if (Create != null)
                 {
                     value = Value = Create(key);
+                    PostCount = 1;
                     return true;
                 }
                 value = Value = default(TValue);
@@ -1468,6 +1488,7 @@ namespace CSharpTest.Net.Collections
 
             public bool UpdateValue(TKey key, ref TValue value)
             {
+                PreCount = 1;
                 if (Update == null)
                 {
                     Value = value;
@@ -1475,18 +1496,23 @@ namespace CSharpTest.Net.Collections
                 }
 
                 value = Value = Update(key, value);
+                PostCount = 1;
                 return true;
             }
         }
 
         struct UpdateInfo : ICreateOrUpdateValue<TKey, TValue>
         {
+            public int PreCount { get; private set; }
+            public int PostCount { get; private set; }
             public TValue Value;
             readonly bool _hasTestValue;
             readonly TValue _testValue;
 
             public UpdateInfo(TValue expected)
             {
+                PreCount = 1;
+                PostCount = 1;
                 Value = default(TValue);
                 _testValue = expected;
                 _hasTestValue = true;
