@@ -70,6 +70,42 @@ namespace CSharpTest.Net.Library.Test
             }
         }
 
+
+        [Test]
+        public void TestReverseRangeEnumerate()
+        {
+            BTreeDictionary<int, string> data = new BTreeDictionary<int, string>(Comparer);
+            for (int i = 0; i < 1000; i++)
+                Assert.IsTrue(data.TryAdd(i, i.ToString()));
+
+            int ix = 1000;
+            foreach (KeyValuePair<int, string> kv in data.EnumerateRangeReverse(-500, 5000))
+                Assert.AreEqual(--ix, kv.Key);
+            Assert.AreEqual(0, ix);
+
+            foreach (
+                KeyValuePair<int, int> range in
+                    new Dictionary<int, int> { { 6, 25 }, { 7, 26 }, { 8, 27 }, { 9, 28 }, { 22, 29 }, { 28, 28 } })
+            {
+                ix = range.Value;
+                foreach (KeyValuePair<int, string> kv in data.EnumerateRangeReverse(ix, range.Value))
+                    Assert.AreEqual(ix--, kv.Key);
+                Assert.AreEqual(range.Value, ix + 1);
+            }
+
+
+            data.Clear();
+
+            for (int i = 0; i < 1000; i+=2)
+                Assert.IsTrue(data.TryAdd(i, i.ToString()));
+
+            ix = 334;
+            foreach (KeyValuePair<int, string> kv in data.EnumerateRangeReverse(-500, ix - 1))
+                Assert.AreEqual(ix-=2, kv.Key);
+
+
+
+        }
         [Test]
         public void TestGetOrAdd()
         {
