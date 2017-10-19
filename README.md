@@ -4,7 +4,7 @@ CSharpTest.Net.Collections
 This is a fork of CSharpTest.Net.Collections by Roger Knapp.
 
 ## Change Log ##
-
+2017-10-19      Added unit tests for BTreeDictionary's reverse iterators.  
 2017-10-13      Forked original library, merged dev branch into master. Merged upstream pull requests. Added reverse iterators for the BTreeDictionary.  
 2014-09-06	Initial clone and extraction from existing library.
 
